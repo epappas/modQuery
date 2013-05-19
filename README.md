@@ -11,19 +11,19 @@ It's fun.
 
 ## Why to use it ##
 Because..
-You like using pure SQL but not have a unmaintainable JS code.
-You don't want flood your database with unnecessary connections & re-connections.
-You want to wrap your your Query with objects & callbacks that fit better to your JS logic.
-Your model in your JS code doesn't mirror exactly the Database Schema.
-You want a better SQL control.
-You want to have fun & you like beer.
+- You like using pure SQL but not have a unmaintainable JS code.
+- You don't want flood your database with unnecessary connections & re-connections.
+- You want to wrap your your Query with objects & callbacks that fit better to your JS logic.
+- Your model in your JS code doesn't mirror exactly the Database Schema.
+- You want a better SQL control.
+- You want to have fun & you like beer.
 
 ## What to have in mind ##
 
-It is not a persistence framework.
-It currently supports MySQL only.
-It can be used in production but with caution.
-Don't use it if you don't like beer.
+- It is not a persistence framework.
+- It currently supports MySQL only.
+- It can be used in production but with caution.
+- Don't use it if you don't like beer.
 
 ## Getting Started ##
 
@@ -209,4 +209,6 @@ compiles to
 
 ## I found a bug ##
 
-First drink a beer, then create an issue, then pray & have faith.
+- First drink a beer,
+- then create an issue,
+- then pray & have faith.
