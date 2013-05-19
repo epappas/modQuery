@@ -1,0 +1,1 @@
+module.exports = require("./commons/modQuery.js");
