@@ -27,7 +27,11 @@ Because..
 
 ## Getting Started ##
 
-As usual, include the module
+As usual, install
+
+	$ npm install modquery
+
+And include the module
 
 	var modQ = new require("modquery");
 
