@@ -468,14 +468,18 @@ module.exports = (function () {
 	ModQuery.prototype.select = function (fields) {
 		if (this.isBuilt) throw "ModQuery is Built";
 		var fArr = [];
-		if (typeof fields !== "object") {
+		if (typeof fields === "undefined") {
+			fArr.push("*");
+		}
+		else if (typeof fields !== "object") {
 			fArr.push(fields);
-		} else {
+		}
+		else {
 			fArr = fields;
 		}
 
 		for (var i in fArr) {
-			if (typeof this.wizzard.target !== "undefined"
+			if (typeof this.wizzard.target !== "undefined" && typeof this.wizzard.target.fields !== "undefined"
 				&& typeof this.wizzard.target.fields[fArr[i]] !== "undefined" && typeof this.wizzard.target.fields[fArr[i]] !== "undefined") {
 				this.wizzard.fields.push(this.wizzard.target.fields[fArr[i]].select);
 			} else {
