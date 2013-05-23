@@ -241,6 +241,29 @@ module.exports = (function () {
 
 	/**
 	 *
+	 * @returns {*}
+	 */
+	ModQuery.prototype.lazyExecute = function () {
+		if (!this.isBuilt) {
+			this.build();
+		}
+
+		this.queue.push(this.sql);
+		var __this = this;
+		for (var i = 0; i < this.queue.length; ++i) {
+			(function (sql, index) {
+				__this.__self.db.query(sql)
+					.on('error', __this.emit.bind(__this, 'error', __this.__self.db)) // error
+					.on('fields', __this.emit.bind(__this, 'fields', __this.__self.db)) // fields
+					.on('result', __this.emit.bind(__this, 'result', __this.__self.db)) // result
+					.on('end', __this.emit.bind(__this, 'end', __this.__self.db));
+			})(this.queue[i], i);
+		}
+		return this;
+	};
+
+	/**
+	 *
 	 * @param func
 	 * @returns {*}
 	 */
@@ -255,19 +278,17 @@ module.exports = (function () {
 		this.queue.push(this.sql);
 		var __this = this;
 		for (var i = 0; i < this.queue.length; ++i) {
-			var t = __this.on.bind(__this, 'error', __this.__self.db);
-			var tS = t.toString();
 			(function (sql, index) {
-				__this.__self.db.query(sql, function (err, rows, fields) {
+				__this.__self.db.query(sql,function (err, rows, fields) {
 					if (err) {
 						__this.__self.callback([], err, this.sql, index);
 						return;
 					}
 					__this.resultset = rows;
 					__this.__self.callback(rows, null, this.sql, index);
-				})//.on('error', __this.emit.bind(__this, 'error', __this.__self.db)) // error
-					.on('fields', __this.emit.bind(__this, 'fields', __this.__self.db)) // fields
-					.on('result', __this.emit.bind(__this, 'result', __this.__self.db)) // result
+				}).on('error', __this.emit.bind(__this, 'error', __this.__self.db)) // error
+					//.on('fields', __this.emit.bind(__this, 'fields', __this.__self.db)) // fields
+					//.on('result', __this.emit.bind(__this, 'result', __this.__self.db)) // result
 					.on('end', __this.emit.bind(__this, 'end', __this.__self.db));
 			})(this.queue[i], i);
 		}
@@ -293,10 +314,10 @@ module.exports = (function () {
 			}
 			__this.resultset = rows;
 			__this.__self.callback(rows, null, this.sql, fields);
-		}).on('error', __this.on.bind(__this, 'error', this.__self.db)) // error
-			.on('fields', __this.on.bind(__this, 'fields', this.__self.db)) // fields
-			.on('result', __this.on.bind(__this, 'result', this.__self.db)) // result
-			.on('end', __this.on.bind(__this, 'end', this.__self.db));
+		}).on('error', __this.emit.bind(__this, 'error', this.__self.db)) // error
+			.on('fields', __this.emit.bind(__this, 'fields', this.__self.db)) // fields
+			.on('result', __this.emit.bind(__this, 'result', this.__self.db)) // result
+			.on('end', __this.emit.bind(__this, 'end', this.__self.db));
 		return this;
 	};
 
