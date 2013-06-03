@@ -16,7 +16,7 @@ module.exports = (function () {
 				+ (wizzard.joins.length > 0 ? wizzard.joins.join(" ") + "" : "")
 				+ (wizzard.filters.length > 0 ? " WHERE ( " + wizzard.filters.join(") AND (") + " )" : "")
 				+ (wizzard.groupBy.length > 0 ? " GROUP BY " + wizzard.groupBy.join(",") + " " : "")
-				+ (wizzard.sortBy.length > 0 ? " ORDER BY " + wizzard.sortBy.join(",") + " " : "")
+				+ (wizzard.sortBy.length > 0 ? " ORDER BY " + wizzard.sortBy.join(",") + " " : "") + " " + wizzard.sortDir
 				+ (wizzard.limit.length > 0 ? " LIMIT " + wizzard.limit.join(",") + " " : "") + " ";
 			return sql;
 		},
@@ -33,7 +33,7 @@ module.exports = (function () {
 				+ " `" + wizzard.targetName + "` "
 				+ (sets.length > 0 ? " SET " + sets.join(", ") + "" : "")
 				+ (wizzard.filters.length > 0 ? " WHERE ( " + wizzard.filters.join(") AND (") + " )" : "")
-				+ (wizzard.sortBy.length > 0 ? " ORDER BY " + wizzard.sortBy.join(",") + " " : "")
+				+ (wizzard.sortBy.length > 0 ? " ORDER BY " + wizzard.sortBy.join(",") + " " : "") + " " + wizzard.sortDir
 				+ (wizzard.limit.length > 0 ? " LIMIT " + wizzard.limit.join(",") + " " : "") + " ";
 			return sql;
 		},
@@ -71,10 +71,11 @@ module.exports = (function () {
 
 	function ModQuery(args) {
 		this.__self = {
-			db      : args.db,
-			dbArgs  : args.dbArgs,
-			callback: args.callback ? args.callback : function () {},
-			conf    : args.conf || {sql: {}}
+			db          : (args.db),
+			dbArgs      : (args.dbArgs),
+			callback    : (args.callback ? args.callback : function () {}),
+			conf        : (args.conf || {sql: {}}),
+			pingInterval: (args.pingInterval || 1500000) // 25 min
 		};
 		if (typeof this.__self.db === "undefined" && typeof this.__self.dbArgs !== "undefined") {
 			this.__self.db = mysql.createConnection({
@@ -106,6 +107,7 @@ module.exports = (function () {
 			inserts      : [],
 			groupBy      : [],
 			sortBy       : [],
+			sortDir      : [],
 			limit        : [],
 			mode         : "",
 			onDuplicate  : false,
@@ -113,6 +115,19 @@ module.exports = (function () {
 		};
 		this.resultset = {};
 		var mySelf = this;
+
+		// ping to keep persistent connection
+		(function __ping(interval) {
+			mySelf.pingInterval = setTimeout(function () {
+				mySelf.__self.db.query("SELECT \"PING\"", function (err, rows) {
+					if (err) {
+						console.log(err);
+					}
+					__ping(interval);
+				});
+			}, interval);
+		})(this.__self.pingInterval);
+
 		return this;
 	}
 
@@ -162,6 +177,7 @@ module.exports = (function () {
 			inserts      : [],
 			groupBy      : [],
 			sortBy       : [],
+			sortDir      : [],
 			limit        : [],
 			mode         : "",
 			onDuplicate  : false,
@@ -200,6 +216,7 @@ module.exports = (function () {
 			inserts      : [],
 			groupBy      : [],
 			sortBy       : [],
+			sortDir      : [],
 			limit        : [],
 			mode         : "",
 			onDuplicate  : false,
@@ -231,6 +248,7 @@ module.exports = (function () {
 			inserts      : [],
 			groupBy      : [],
 			sortBy       : [],
+			sortDir      : [],
 			limit        : [],
 			mode         : "",
 			onDuplicate  : false,
@@ -443,14 +461,14 @@ module.exports = (function () {
 			for (var f in field) {
 				if (field.hasOwnProperty(f)) {
 					var obj = {};
-					obj[f] = (typeof field[f] === "string" ? "'" + field[f] + "'" : field[f]);
+					obj[f] = (typeof field[f] === "string" && field[f][0] !== "(" ? "'" + field[f] + "'" : field[f]);
 					this.wizzard.sets.push(obj);
 				}
 			}
 		}
 		else {
 			var obj = {};
-			obj[field] = (typeof value === "string" ? "'" + value + "'" : value);
+			obj[field] = (typeof value === "string" && value[0] !== "(" ? "'" + value + "'" : value);
 			this.wizzard.sets.push(obj);
 		}
 		return this;
@@ -468,14 +486,14 @@ module.exports = (function () {
 			for (var f in field) {
 				if (field.hasOwnProperty(f)) {
 					var obj = {};
-					obj[f] = (typeof field[f] === "string" ? "'" + field[f] + "'" : field[f]);
+					obj[f] = (typeof field[f] === "string" && field[f][0] !== "(" ? "'" + field[f] + "'" : field[f]);
 					this.wizzard.inserts.push(obj);
 				}
 			}
 		}
 		else {
 			var obj = {};
-			obj[field] = (typeof value === "string" ? "'" + value + "'" : value);
+			obj[field] = (typeof value === "string" && value[0] !== "(" ? "'" + value + "'" : value);
 			this.wizzard.inserts.push(obj);
 		}
 		return this;
@@ -569,7 +587,7 @@ module.exports = (function () {
 	 * @param fields
 	 * @return {*}
 	 */
-	ModQuery.prototype.sortBy = function (fields) {
+	ModQuery.prototype.sortBy = function (fields, dir) {
 		if (this.isBuilt) throw "ModQuery is Built";
 		var fArr = [];
 		if (typeof fields !== "object") {
@@ -578,6 +596,7 @@ module.exports = (function () {
 			fArr = fields;
 		}
 		this.wizzard.sortBy = this.wizzard.sortBy.concat(fArr);
+		this.wizzard.sortDir = (dir || "ASC")
 		return this;
 	};
 
@@ -735,7 +754,7 @@ module.exports = (function () {
 		 */
 		Filter.prototype.equals = function (arg) {
 			this.opperator = "=";
-			this.filtVal = (typeof arg === "string" ? "'" + arg + "'" : arg);
+			this.filtVal = (typeof arg === "string" && arg[0] !== "(" ? "'" + arg + "'" : arg);
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
 
@@ -749,7 +768,7 @@ module.exports = (function () {
 		 */
 		Filter.prototype.notEquals = function (arg) {
 			this.opperator = "!=";
-			this.filtVal = (typeof arg === "string" ? "'" + arg + "'" : arg);
+			this.filtVal = (typeof arg === "string" && arg[0] !== "(" ? "'" + arg + "'" : arg);
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
 
