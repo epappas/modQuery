@@ -12,7 +12,7 @@ module.exports = (function () {
 			var sql = "";
 			sql += " SELECT "
 				+ (wizzard.fields.length > 0 ? wizzard.fields.join(", ") : " * ") + " "
-				+ " FROM `" + wizzard.targetName + "` "
+				+ " FROM " + wizzard.targetName + " "
 				+ (wizzard.joins.length > 0 ? wizzard.joins.join(" ") + "" : "")
 				+ (wizzard.filters.length > 0 ? " WHERE ( " + wizzard.filters.join(") AND (") + " )" : "")
 				+ (wizzard.groupBy.length > 0 ? " GROUP BY " + wizzard.groupBy.join(",") + " " : "")
@@ -659,9 +659,6 @@ module.exports = (function () {
 				} else {
 					wizz.joins.push(wizz.target.joins[mod].sql);
 				}
-			}
-			else if (typeof mod !== "undefined" && wizz.targetName !== mod) {
-				wizz.joins.push(mod);
 			}
 			return __this;
 		}
