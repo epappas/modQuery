@@ -70,6 +70,7 @@ module.exports = (function () {
 	 */
 
 	function ModQuery(args) {
+		events.EventEmitter.call(this);
 		this.__self = {
 			db          : (args.db),
 			dbArgs      : (args.dbArgs),
@@ -126,7 +127,9 @@ module.exports = (function () {
 					__ping(interval);
 				});
 			}, interval);
-		})(this.__self.pingInterval);
+		});//(this.__self.pingInterval);
+
+		//this.on("newListener", console.log.bind(console, "-->newListener: "));
 
 		return this;
 	}
@@ -143,7 +146,11 @@ module.exports = (function () {
 	 * @return {ModQuery}
 	 */
 	ModQuery.prototype.newModQuery = function () {
-		return new ModQuery(this.__self);
+		// inherit
+		return (function (father) {
+			this.prototype = father;
+			return this;
+		}).call(new ModQuery(this.__self), new events.EventEmitter());
 	};
 
 	/**
@@ -261,23 +268,27 @@ module.exports = (function () {
 	 *
 	 * @returns {*}
 	 */
-	ModQuery.prototype.lazyExecute = function () {
+	ModQuery.prototype.lazyExecute = function (handler) {
 		if (!this.isBuilt) {
 			this.build();
 		}
 
 		this.queue.push(this.sql);
 		var __this = this;
-		for (var i = 0; i < this.queue.length; ++i) {
-			(function (sql, index) {
+		var observ = new events.EventEmitter();
+
+		setImmediate(handler.bind(observ, observ));
+
+		for (var i = 0; i < __this.queue.length; ++i) {
+			setImmediate((function (sql, index) {
 				__this.__self.db.query(sql)
-					.on('error', __this.emit.bind(__this, 'error', __this.__self.db)) // error
-					.on('fields', __this.emit.bind(__this, 'fields', __this.__self.db)) // fields
-					.on('result', __this.emit.bind(__this, 'result', __this.__self.db)) // result
-					.on('end', __this.emit.bind(__this, 'end', __this.__self.db));
-			})(this.queue[i], i);
+					.on('error', observ.emit.bind(observ, 'error', __this.__self.db)) // error
+					.on('fields', observ.emit.bind(observ, 'fields', __this.__self.db)) // fields
+					.on('result', observ.emit.bind(observ, 'result', __this.__self.db)) // result
+					.on('end', observ.emit.bind(observ, 'end', __this.__self.db)); // end
+			}).bind(__this, this.queue[i], i));
 		}
-		return this;
+		return __this;
 	};
 
 	/**
