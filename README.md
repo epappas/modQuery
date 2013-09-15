@@ -1,4 +1,4 @@
-modQuery (v 0.5)
+modQuery (v 0.9)
 ==========================
 
 A module to use for MySQL queries with respect to SQL.
@@ -210,6 +210,30 @@ compiles to
 
 	SELECT  *   FROM `beers_mirror`   ;
 
+
+Lazy Execute: Executes query in asynchronous manner and streams each row of result set.
+Best approach when large result set needs to be processed row by row.
+
+	modQuery.newModQuery()
+		.from("beers") //
+		.select(["name"]) //
+		.filterBy("beers", "id").in([1,2,3,4]) //
+		// .. anything else can be appended
+		.lazyExecute(function (stream) {
+			stream.on("result",function (db, row) {
+				db.pause();
+				// do something with the row e.g push it to redis
+				process.nextTick(function () { // setImmediate() might be better
+					db.resume();
+				});
+			}).on('end',function () {
+					// all done proceed!
+					// here a promise can return its value,
+					// or proceed with the next() function
+				}).on('error', function (db, err) {
+					console.log(err);
+				});
+		});
 
 ## I found a bug ##
 
