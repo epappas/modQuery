@@ -1,8 +1,8 @@
 {
-	"name"                : "modquery",
-	"description"         : "A module to use for MySQL queries with respect to SQL.",
-	"version"             : "0.5.1",
-	"keywords"            : [
+	"name": "modquery",
+	"description": "A module to use for MySQL queries with respect to SQL.",
+	"version": "0.9.0",
+	"keywords": [
 		"modquery",
 		"modQuery",
 		"MySQL",
@@ -10,21 +10,27 @@
 		"sql",
 		"actors"
 	],
-	"author"              : {
-		"name" : "Evangelos Pappas",
-		"email": "epappas@evalonlabs.com",
-		"url"  : "evalonlabs.com"
-	},
-	"repository"          : {
+	"author": "Evangelos Pappas <epappas@evalonlabs.com> (evalonlabs.com)",
+	"repository": {
 		"type": "git",
-		"url" : "https://github.com/BagosGiAr/modQuery.git"
+		"url": "https://github.com/BagosGiAr/modQuery.git"
 	},
-	"main"                : "./index.js",
-	"dependencies"        : {
+	"main": "./index.js",
+	"dependencies": {
 		"mysql": "2.x"
 	},
-	"devDependencies"     : { },
+	"devDependencies": {},
 	"optionalDependencies": {},
-	"engine"              : "node >= 0.8.x",
-	"readmeFilename"      : "README.md"
+	"engine": "node >= 0.8.x",
+	"bugs": {
+		"url": "https://github.com/BagosGiAr/modQuery/issues"
+	},
+	"directories": {
+		"example": "examples",
+		"test": "test"
+	},
+	"scripts": {
+		"test": "test"
+	},
+	"license": "BSD-2-Clause"
 }

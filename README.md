@@ -1,4 +1,4 @@
-modQuery (v 0.9)
+modQuery (v 0.9.0)
 ==========================
 
 A module to use for MySQL queries with respect to SQL.
