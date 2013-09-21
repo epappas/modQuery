@@ -5,6 +5,11 @@
 var events = require('events');
 var mysql = require('mysql');
 
+// setImmediate support
+if (typeof setImmediate === "undefined") {
+	require("setimmediate");
+}
+
 module.exports = (function () {
 
 	var SqlBuilder = {
@@ -72,13 +77,16 @@ module.exports = (function () {
 	function ModQuery(args) {
 		events.EventEmitter.call(this);
 		this.__self = {
-			db          : (args.db),
-			dbArgs      : (args.dbArgs),
-			callback    : (args.callback ? args.callback : function () {}),
-			conf        : (args.conf || {sql: {}}),
-			pingInterval: (args.pingInterval || 1500000) // 25 min
+			dbArgs            : (args.dbArgs || args),
+			conf              : (args.conf || {sql: {}}),
+			usePool           : (args.usePool || false),
+			multipleStatements: (args.multipleStatements || true)
 		};
-		if (typeof this.__self.db === "undefined" && typeof this.__self.dbArgs !== "undefined") {
+
+		if (this.__self.usePool) {
+			this.__self.pool = mysql.createPool(this.__self.dbArgs);
+		}
+		else {
 			this.__self.db = mysql.createConnection({
 				host              : this.__self.dbArgs.host,
 				user              : this.__self.dbArgs.user,
@@ -91,6 +99,7 @@ module.exports = (function () {
 			};
 			this.__self.db.connect();
 		}
+		this.__self.callback = function () {};
 		this.__qMods = this.__self.conf.sql;
 		this.isBuilt = false;
 		this.sql = "";
@@ -117,18 +126,6 @@ module.exports = (function () {
 		this.resultset = {};
 		var mySelf = this;
 
-		// ping to keep persistent connection
-		(function __ping(interval) {
-			mySelf.pingInterval = setTimeout(function () {
-				mySelf.__self.db.query("SELECT \"PING\"", function (err, rows) {
-					if (err) {
-						console.log(err);
-					}
-					__ping(interval);
-				});
-			}, interval);
-		});//(this.__self.pingInterval);
-
 		//this.on("newListener", console.log.bind(console, "-->newListener: "));
 
 		return this;
@@ -140,6 +137,15 @@ module.exports = (function () {
 		this.prototype = father;
 		return this;
 	}).call(ModQuery, new events.EventEmitter());
+
+	function __getConnection(callback) {
+		var __this = this;
+		if (this.__self.usePool && typeof this.__self.pool !== "undefined") {
+			this.__self.pool.getConnection(callback.bind(this));
+			return;
+		}
+		callback.call(this, null, this.__self.db);
+	}
 
 	/**
 	 *
@@ -281,11 +287,17 @@ module.exports = (function () {
 
 		for (var i = 0; i < __this.queue.length; ++i) {
 			setImmediate((function (sql, index) {
-				__this.__self.db.query(sql)
-					.on('error', observ.emit.bind(observ, 'error', __this.__self.db)) // error
-					.on('fields', observ.emit.bind(observ, 'fields', __this.__self.db)) // fields
-					.on('result', observ.emit.bind(observ, 'result', __this.__self.db)) // result
-					.on('end', observ.emit.bind(observ, 'end', __this.__self.db)); // end
+				__getConnection.call(__this, function (err, conn) {
+					if (err) {
+						observ.emit('error', __this.__self.db, err);
+						return;
+					}
+					conn.query(sql)
+						.on('error', observ.emit.bind(observ, 'error', __this.__self.db)) // error
+						.on('fields', observ.emit.bind(observ, 'fields', __this.__self.db)) // fields
+						.on('result', observ.emit.bind(observ, 'result', __this.__self.db)) // result
+						.on('end', observ.emit.bind(observ, 'end', __this.__self.db)); // end
+				});
 			}).bind(__this, this.queue[i], i));
 		}
 		return __this;
@@ -308,17 +320,20 @@ module.exports = (function () {
 		var __this = this;
 		for (var i = 0; i < this.queue.length; ++i) {
 			(function (sql, index) {
-				__this.__self.db.query(sql,function (err, rows, fields) {
+				__getConnection.call(__this, function (err, conn) {
 					if (err) {
-						__this.__self.callback([], err, this.sql, index);
+						__this.__self.callback([], err, sql, index);
 						return;
 					}
-					__this.resultset = rows;
-					__this.__self.callback(rows, null, this.sql, index);
-				}).on('error', __this.emit.bind(__this, 'error', __this.__self.db)) // error
-					//.on('fields', __this.emit.bind(__this, 'fields', __this.__self.db)) // fields
-					//.on('result', __this.emit.bind(__this, 'result', __this.__self.db)) // result
-					.on('end', __this.emit.bind(__this, 'end', __this.__self.db));
+					conn.query(sql, function (err, rows, fields) {
+						if (err) {
+							__this.__self.callback([], err, sql, index);
+							return;
+						}
+						__this.resultset = rows;
+						__this.__self.callback(rows, null, sql, index);
+					})
+				});
 			})(this.queue[i], i);
 		}
 		return this;
@@ -336,17 +351,20 @@ module.exports = (function () {
 		}
 
 		var __this = this;
-		this.__self.db.query(sql,function (err, rows, fields) {
+		__getConnection.call(__this, function (err, conn) {
 			if (err) {
-				__this.__self.callback([], err, this.sql, fields);
+				__this.__self.callback([], err, sql, index);
 				return;
 			}
-			__this.resultset = rows;
-			__this.__self.callback(rows, null, this.sql, fields);
-		}).on('error', __this.emit.bind(__this, 'error', this.__self.db)) // error
-			.on('fields', __this.emit.bind(__this, 'fields', this.__self.db)) // fields
-			.on('result', __this.emit.bind(__this, 'result', this.__self.db)) // result
-			.on('end', __this.emit.bind(__this, 'end', this.__self.db));
+			conn.query(sql, function (err, rows, fields) {
+				if (err) {
+					__this.__self.callback([], err, this.sql, fields);
+					return;
+				}
+				__this.resultset = rows;
+				__this.__self.callback(rows, null, this.sql, fields);
+			});
+		});
 		return this;
 	};
 
@@ -607,7 +625,7 @@ module.exports = (function () {
 			fArr = fields;
 		}
 		this.wizzard.sortBy = this.wizzard.sortBy.concat(fArr);
-		this.wizzard.sortDir = (dir || "ASC")
+		this.wizzard.sortDir = (dir || "ASC");
 		return this;
 	};
 
@@ -734,7 +752,6 @@ module.exports = (function () {
 			}
 
 			this.opperator = "IN";
-			//this.filtVal = (typeof tmp[0] === "string" ? "('" + tmp.join("','") + "')" : "(" + tmp.join(",") + ")");
 			this.filtVal = "(" + tmp.join(",") + ")";
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
@@ -762,7 +779,7 @@ module.exports = (function () {
 		 */
 		Filter.prototype.equals = function (arg) {
 			this.opperator = "=";
-			this.filtVal = (typeof arg === "string" && arg[0] !== "(" ? "'" + arg + "'" : arg);
+			this.filtVal = (typeof arg === "string" && arg[0] !== "(" ? mysql.escape(arg) : arg);
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
 
@@ -776,7 +793,7 @@ module.exports = (function () {
 		 */
 		Filter.prototype.notEquals = function (arg) {
 			this.opperator = "!=";
-			this.filtVal = (typeof arg === "string" && arg[0] !== "(" ? "'" + arg + "'" : arg);
+			this.filtVal = (typeof arg === "string" && arg[0] !== "(" ? mysql.escape(arg) : arg);
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
 
@@ -790,6 +807,24 @@ module.exports = (function () {
 		 */
 		Filter.prototype.contains = function (arg) {
 			this.opperator = "LIKE";
+			arg = arg.replace(/[\0\n\r\b\t\\\'\"\x1a]/g, function (s) {
+				switch (s) {
+					case "\0":
+						return "\\0";
+					case "\n":
+						return "\\n";
+					case "\r":
+						return "\\r";
+					case "\b":
+						return "\\b";
+					case "\t":
+						return "\\t";
+					case "\x1a":
+						return "\\Z";
+					default:
+						return "\\" + s;
+				}
+			});
 			this.filtVal = "'%" + arg + "%'";
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
@@ -804,6 +839,24 @@ module.exports = (function () {
 		 */
 		Filter.prototype.startsWith = function (arg) {
 			this.opperator = "LIKE";
+			arg = arg.replace(/[\0\n\r\b\t\\\'\"\x1a]/g, function (s) {
+				switch (s) {
+					case "\0":
+						return "\\0";
+					case "\n":
+						return "\\n";
+					case "\r":
+						return "\\r";
+					case "\b":
+						return "\\b";
+					case "\t":
+						return "\\t";
+					case "\x1a":
+						return "\\Z";
+					default:
+						return "\\" + s;
+				}
+			});
 			this.filtVal = "'%" + arg + "'";
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
@@ -818,6 +871,24 @@ module.exports = (function () {
 		 */
 		Filter.prototype.endsWith = function (arg) {
 			this.opperator = "LIKE";
+			arg = arg.replace(/[\0\n\r\b\t\\\'\"\x1a]/g, function (s) {
+				switch (s) {
+					case "\0":
+						return "\\0";
+					case "\n":
+						return "\\n";
+					case "\r":
+						return "\\r";
+					case "\b":
+						return "\\b";
+					case "\t":
+						return "\\t";
+					case "\x1a":
+						return "\\Z";
+					default:
+						return "\\" + s;
+				}
+			});
 			this.filtVal = "'" + arg + "%'";
 			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
 			this.__wizz.filters.push(this.sql);
@@ -833,7 +904,7 @@ module.exports = (function () {
 		Filter.prototype.lessThan = function (arg) {
 			this.opperator = " < ";
 			this.filtVal = arg;
-			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
+			this.sql = " " + this.field + " " + this.opperator + " " + mysql.escape(this.filtVal) + " ";
 			this.__wizz.filters.push(this.sql);
 
 			return this.__modQ;
@@ -847,7 +918,7 @@ module.exports = (function () {
 		Filter.prototype.lessThanEquals = function (arg) {
 			this.opperator = " <= ";
 			this.filtVal = arg;
-			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
+			this.sql = " " + this.field + " " + this.opperator + " " + mysql.escape(this.filtVal) + " ";
 			this.__wizz.filters.push(this.sql);
 
 			return this.__modQ;
@@ -861,7 +932,7 @@ module.exports = (function () {
 		Filter.prototype.greaterThan = function (arg) {
 			this.opperator = " > ";
 			this.filtVal = arg;
-			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
+			this.sql = " " + this.field + " " + this.opperator + " " + mysql.escape(this.filtVal) + " ";
 			this.__wizz.filters.push(this.sql);
 
 			return this.__modQ;
@@ -875,7 +946,7 @@ module.exports = (function () {
 		Filter.prototype.greaterThanEquals = function (arg) {
 			this.opperator = " >= ";
 			this.filtVal = arg;
-			this.sql = " " + this.field + " " + this.opperator + " " + this.filtVal + " ";
+			this.sql = " " + this.field + " " + this.opperator + " " + mysql.escape(this.filtVal) + " ";
 			this.__wizz.filters.push(this.sql);
 
 			return this.__modQ;
